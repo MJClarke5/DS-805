@@ -1,0 +1,486 @@
+---
+title: |
+  | Final Project
+  | DS 805: Statistical Learning
+author: |
+  | Matthew Clarke and Lisa Olsson
+output: html_document
+---
+
+## Data Requirements:
+
+- You can pick any data you want as long as it is a classification problem.
+- Some sources are:
+
+    - Kaggle <https://www.kaggle.com/datasets?tags=13302-Classification>
+    - UCI Machine Learning Repository <https://archive.ics.uci.edu/ml/datasets.php?format=&task=cla&att=&area=&numAtt=&numIns=&type=&sort=nameUp&view=table>
+```{r setup, include=FALSE, tidy=TRUE}
+knitr::opts_chunk$set(echo=TRUE)
+options("kableExtra.html.bsTable" = T)
+
+library(kableExtra)
+library(MASS) 
+library(ISLR) 
+library(class)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(Metrics)
+library(ipred)
+library(randomForest)
+library(gbm)
+library(e1071)
+library(pROC)
+library(ROCR)
+library(xgboost)
+library(smotefamily)
+library(car)
+library(e1071)
+  
+```
+  
+- Read your data in R and call it df. For the rest of this document `y` refers to the variable you are predicting.
+
+```{r}
+titanic= read.table("D:/Spring 2023/Term 1/DS 805/Project/Titanic-Dataset.csv", header=TRUE, sep=",")
+
+attach(titanic)
+head(titanic)
+
+#glimpse(titanic)
+
+```
+
+## The grading rubric can be found below:
+
++----------------+---------------+--------------------+-----------------------+
+|                | R code        | Decision/Why       | Communication         |
+|                |               |                    |  of findings          |
++================+===============+====================+=======================+
+| Percentage of  | 30%           | 35%                | 35%                   |
+| Assigned Points|               |                    |                       |
++----------------+---------------+--------------------+-----------------------+
+
+
+- **Decision/why?**: Explain your reasoning behind your choice of the procedure, set of variables and such for the question. 
+
+    - Explain why you use the procedure/model/variable
+    - To exceed this criterion, describe steps taken to implement the procedure in a non technical way.
+
+
+- **Communication of your findings**: Explain your results in terms of training MSE, testing MSE, and prediction of the variable `Y` 
+
+    - Explain why you think one model is better than the other.
+    - To exceed this criterion, explain your model and how it predicts `y` in a non technical way.
+
+
+## Part 1: Exploratory Data Analysis (20 points)
+
+1. Check for existence of NA's (missing data)
+```{r}
+
+#titanic=na.omit(titanic)
+# Load the titanic dataset
+
+# Count the number of missing values in each column
+sapply(titanic, function(x) sum(is.na(x)))
+
+summary(titanic)
+```
+
+
+2. If necessary, classify all categorical variables **except the one you are predicting** as factors. Calculate the summary statistics of the entire data set. 
+
+```{r}
+titanic[sapply(titanic, is.character)] <- lapply(titanic[sapply(titanic, is.character)], as.factor)
+titanic$Survived<-as.factor(Survived)
+titanic$Pclass<-as.factor(Pclass)
+summary(titanic)
+titanic$Cabin<-factor(substr(Cabin, 1, 1))
+```
+
+
+3. For the numerical variables, plot box plots based on values of `y`. Do you see a difference between the box plots for any of the variables you choose?
+
+```{r}
+# Create a box plot of passenger fares, colored by survival status
+ggplot(titanic, aes(x = factor(Survived), y = Fare, fill = factor(Survived))) +
+  geom_boxplot() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Survival Status") +
+  ylab("Fare") +
+  ggtitle("Passenger Fare Distribution by Survival Status")
+
+# Create a box plot of Passenger ID, colored by survival status
+ggplot(titanic, aes(x = factor(Survived), y = PassengerId, fill = factor(Survived))) +
+  geom_boxplot() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Survival Status") +
+  ylab("Passenger ID") +
+  ggtitle("Passenger ID Distribution by Survival Status")
+
+# Create a box plot of Passenger ID, colored by survival status
+ggplot(titanic, aes(x = factor(Survived), y = Age, fill = factor(Survived))) +
+  geom_boxplot() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Survival Status") +
+  ylab("Age") +
+  ggtitle("Age Distribution by Survival Status")
+```
+
+
+4. For the categorical variables, plot bar charts for the different values of `y`. Do you see a difference between plots for any of the variables you choose?
+
+```{r}
+# Create a bar chart of the number of survivors and non-survivors
+ggplot(titanic, aes(x = factor(Survived), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Survival Status") +
+  ylab("Count") +
+  ggtitle("Number of Survivors and Non-Survivors")
+
+# Create a bar chart of survival by passenger class
+ggplot(titanic, aes(x = factor(Pclass), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Passenger Class") +
+  ylab("Count") +
+  ggtitle("Survival by Passenger Class")
+
+# Create a bar chart of survival by sex
+ggplot(titanic, aes(x = Sex, fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Sex") +
+  ylab("Count") +
+  ggtitle("Survival by Sex")
+
+# Create a bar chart of survival by number of siblings/spouses
+ggplot(titanic, aes(x = factor(SibSp), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Number of Siblings/Spouses") +
+  ylab("Count") +
+  ggtitle("Survival by Number of Siblings/Spouses")
+
+# Create a bar chart of survival by number of parents/children
+ggplot(titanic, aes(x = factor(Parch), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Number of Parents/Children") +
+  ylab("Count") +
+  ggtitle("Survival by Number of Parents/Children")
+
+# Create a bar chart of survival by cabin letter
+ggplot(titanic, aes(x = factor(substr(Cabin, 1, 1)), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Cabin Letter") +
+  ylab("Count") +
+  ggtitle("Survival by Cabin Letter")
+
+# Create a bar chart of survival by embarkation port
+ggplot(titanic, aes(x = factor(Embarked), fill = factor(Survived))) +
+  geom_bar() +
+  scale_fill_discrete(name = "Survived", labels = c("No", "Yes")) +
+  xlab("Embarkation Port") +
+  ylab("Count") +
+  ggtitle("Survival by Embarkation Port")
+
+
+```
+
+
+6. Test/training separation: Separate your data into 80% training and 20% testing data. Do not forget to set seed. Please use the same separation for the whole assignment, as it is needed to be able to compare the models.
+
+```{r}
+#altering the dataset
+
+set.seed(981022)
+#take away meaningless columns
+titanic <- subset(titanic, select = -Name)
+titanic <- subset(titanic, select = -Ticket)
+
+# Replace all missing values in Age with the mean, this was the best strategy we came up with to not delete the values 
+titanic$Age[is.na(titanic$Age)] <- mean(titanic$Age, na.rm = TRUE)
+```
+
+
+```{r}
+set.seed(981022)
+## 20% of the sample size to testing set
+smp_size=floor(0.8 * nrow(titanic))
+train_ind=sample(seq_len(nrow(titanic)), size = smp_size)
+
+train=titanic[train_ind, ]
+test=titanic[-train_ind, ]
+c(nrow(titanic),nrow(train),nrow(test))
+
+```
+
+
+## Part 2: Logistic Regression or LDA (15 points)
+
+1. Develop a classification model where the variable `y` is the dependent variable using the Logistic Regression or LDA, rest of the variables, and your training data set.
+
+```{r}
+#Logistic Regression
+logfit<-glm(Survived~., data=test, family=binomial) #we could take out name and ticket from the data overall
+summary(logfit) 
+
+
+
+#### not too sure about this one.
+#LDA
+lda_m = lda(Survived~., data=train)
+plot(lda_m)
+lda.pred = predict(lda_m, newdata=test)
+
+#confusion matrix
+table(test$Survived, lda.pred$class)
+#error rate
+1 - mean(test$Survived==lda.pred$class)
+```
+
+2.  Obtain the confusion matrix and compute the **testing error rate** based on the logistic regression classification.
+```{r}
+#Prediction
+logprob<-predict(logfit, newdata=test, type="response")
+head(logprob,3)
+
+logpred=rep(0, nrow(test))
+logpred[logprob>=.5]=1 # why are there NAs in the logprob?
+logpred=as.factor(logpred)
+
+head(logpred,3)
+#confusion Matrix
+table(logpred, True=test[,"Survived"])
+```
+
+
+3. Explain your choices and communicate your results.
+
+
+## Part 3: KNN (15 points)
+
+1. Apply a KNN classification to the training data using.
+
+```{r}
+args(knn)
+knn.train <- train[, c(2, 3, 5, 8)]
+knn.test <- test[, c(2, 3, 5, 8)]
+knn.train$Pclass<-as.integer(knn.train$Pclass)
+knn.test$Pclass<-as.integer(knn.test$Pclass)
+knn.trainLabels = train[,"Survived"]
+knn.testLabels=test[,"Survived"]
+
+knn3 <- knn(train = knn.train, test = knn.test, cl = knn.trainLabels,  k=3) # 3 gave us the highest accuracy result
+plot(knn3, main="Mortality Among Titanic Passengers")
+```
+
+2.  Obtain the confusion matrix and compute the testing error rate based on the KNN classification.
+```{r}
+conf_matrix <- confusionMatrix(knn3, knn.testLabels)
+conf_matrix
+```
+
+3. Explain your choices and communicate your results.
+
+We picked the variables that are numeric, but also the Pclass variable. The Pclass variable is a factor originally however since the levels of the class have inherent meaning and we saw the significance of the variables in the logistic regression we choose to do our best to keep it. We turned the variable back in to an integer. The interpretation of this is that the move between first class and second class is as big as the move between the second and third. We feel comfortable with this interpretation and therefore included it in our model. 
+
+## Part 4: Tree Based Model (15 points)
+
+1. Apply one of the following models to your training data: *Classification Tree, Random Forrest, Bagging or Boosting*
+
+```{r}
+library(rpart)
+library(rpart.plot)
+decisiontree <- rpart(Survived~., data = train, method = "class")
+rpart.plot(decisiontree, extra = 110)
+
+predicted = predict(decisiontree, test, type = "class")
+table = table(test$Survived, predicted)
+table
+dt_accuracy = sum(diag(table)) / sum(table)
+dt_accuracy
+
+
+#optimizing
+control = rpart.control(minsplit = 5,
+                         minbucket = 2,
+                         maxdepth = 5,
+                         cp = 0)
+tuned_fit = rpart(Survived~., data = train, method = "class", control = control)
+dt_predict = predict(tuned_fit, test, type = "class")
+table_mat = table(test$Survived, dt_predict)
+dt_accuracy_2 = sum(diag(table_mat)) / sum(table_mat)
+dt_accuracy_2
+rpart.plot(tuned_fit, extra = 106)
+
+decisiontree_prune<-prune(decisiontree, cp = 0.05)
+rpart.plot(decisiontree_prune, extra = 110)
+
+```
+
+
+```{r}
+#boosting
+set.seed(981022)
+summary(train)
+model.boos <- gbm(formula = factor(Survived) ~ .-Cabin, distribution="bernoulli", data=train, n.trees = 2000)
+print(model.boos)
+
+pred.boost=predict(model.boos, newdata=test,n.trees=1000, distribution="bernoulli", type="response")
+
+head(pred.boost)
+boostpred=ifelse(pred.boost < 0.5, 0, 1)
+head(boostpred)
+
+#CV Optimization - Keeps crashing R "Fatal Error"
+model.boos.cv <- gbm(model.boos, distribution = "bernoulli", test,n.trees = 1000, cv.folds = 5)
+ntree.cv.opt=gbm.perf(model.boos, method="cv")
+print(paste0("Optimal ntrees (OOB Estimate): ", ntree.oob.opt))                         
+print(paste0("Optimal ntrees (CV Estimate): ", ntree.cv.opt))
+
+
+pred.1=predict(object = model.boos, 
+                  newdata = test,
+                  n.trees = ntree.cv.opt)
+auc1=auc(test$binary,pred.1)  #OOB
+roc.test = roc(test$binary ~ pred.2, plot = TRUE, print.auc = TRUE)
+```
+```{r}
+train2<-train
+train2[sapply(train2, is.factor)] <- lapply(train2[sapply(train2, is.factor)], as.numeric)
+train2$Survived=train2$Survived-1
+data1=as.matrix(train2)
+data1.t=as.matrix(test)
+
+ddata1 <- xgb.DMatrix(data1, label=as.numeric(train2$Survived))
+#ddata1.t <- xgb.DMatrix(data1.t, label=test$Survived)
+
+Boos1 <- xgb.train(data = ddata1, max_depth = 2,
+              eta = 1, nthread = 4, nrounds = 5,
+              watchlist = list(train2 = ddata1, eval = ddata1),
+              objective = "binary:logistic")
+Boos1
+
+
+
+```
+
+
+```{r}
+#Random Forrest
+set.seed(901022)
+mtry.rf = tuneRF(x = subset(train),y = train$Survived, ntreeTry = 6)
+
+mtry_opt <- mtry.rf[,"mtry"][which.min(mtry.rf[,"OOBError"])]
+print(mtry_opt)
+
+model.rf=randomForest(factor(Survived) ~ . , data = train , importance=TRUE,proximity=TRUE, mtry=mtry_opt, ntree=500)
+print(model.rf)
+      
+```
+
+2. Obtain the confusion matrix and compute the testing error rate based on your chosen tree based model.
+
+```{r}
+#Predict
+pred.rf= predict(model.rf, newdata = test, type = "class")
+# Calculate the confusion matrix for the test set
+confusionMatrix(data = pred.rf, reference = test$Survived)
+```
+
+3. Explain your choices and communicate your results.
+
+
+## Part 5: SVM (15 points)
+
+1. Apply a SVM model to your training data.
+
+```{r}
+
+#set seed
+#set.seed(42)
+#set number of data points. 
+#n = length(titanic)
+#Generate data frame with two uniformly distributed predictors lying between 0 and 1.
+#df <- data.frame(x1 = runif(n), x2 = runif(n))
+#classify data points depending on location
+#df$y <- factor(ifelse(df$x2 - 1.4*df$x1 < 0, -1, 1), levels = c(-1, 1))
+#set margin
+#delta <- 0.07
+# retain only those points that lie outside the margin
+#df1 <- df[abs(1.4*df$x1 - df$x2) > delta, ]
+#build plot
+#plot_margins <- ggplot(data = df1, aes(x = x1, y = x2, color = y)) + geom_point() + 
+#    scale_color_manual(values = c("red", "blue")) + 
+#    geom_abline(slope = 1.4, intercept = 0)
+#display plot 
+#plot_margins
+
+#test and train split:
+#df[, "train"] = ifelse(runif(nrow(df))<.8, 1, 0)
+#train_svm <- df[df$train == 1, ]
+#test_svm <- df[df$train == 0, ]
+#find index of "train" column
+#index <- grep("train", names(df))
+#remove "train" column from train and test dataset
+#train_svm <- train_svm[, -index]
+#test_svm <- test_svm[, -index]
+
+
+train2<-train
+train2<-lapply(train, as.numeric)
+test2<-test
+test2<-lapply(test, as.numeric)
+
+#build svm model, setting required parameters
+svm_model<- svm(Survived ~ ., data = train2, type = "C-classification", kernel = "linear", scale = FALSE, cost=0.1)
+summary(svm_model)
+
+svm_special<- subset(titanic, select = -Cabin)
+train21<-subset(train2, select = -Cabin)
+plot(svm_model, train21)
+
+pred_test <- predict(svm_model, test2)
+mean(pred_test == test2$y)
+
+svm_model<- svm(Survived ~ ., data= train, type = "C-classification", kernel = "linear", scale = FALSE, cost=0.1)
+summary(svm_model)
+pred_test<-predict(svm_model, test)
+mean(pred_test == test$Survived)
+
+#Tuning
+tune.svm=tune(svm,Survived ~ ., data = train, type = "C-classification", kernel = "linear", ranges =list(cost=c(0.001 , 0.01, 0.1, 1,5,10,100)))
+summary(tune.svm)
+bestmod=tune.svm$best.model
+
+pred_test2<-predict(bestmod, test)
+mean(pred_test2 == test$Survived)
+
+confusionMatrix(data = pred_test, reference = test$Survived)
+#Best.model performed worse
+confusionMatrix(data = pred_test2, reference = test$Survived)
+
+
+```
+
+
+2. Calculate the confusion matrix using the testing data.
+
+3. Explain your choices and communicate your results.
+
+
+## Part 6: Conclusion (20 points)
+
+1. (10 points) Based on the different classification models, which one do you think is the best model to predict `y`? Please consider the following in your response:
+
+    - Accuracy/error rates
+    - Do you think you can improve the model by adding any other information?
+    
+2. (10 points) What are your learning outcomes for this assignment? Please focus on your learning outcomes in terms of statistical learning, model interpretations, and R skills - it is up to you to include this part in your presentation or not.
+
+
